@@ -71,8 +71,8 @@ fn main() {
         println!("cargo:rustc-cfg=no_core_cstr");
     }
 
-    // Current minimum supported version of serde_derive crate is Rust 1.68.
-    if minor < 68 {
+    // Current minimum supported version of serde_derive crate is Rust 1.71.
+    if minor < 71 {
         println!("cargo:rustc-cfg=no_serde_derive");
     }
 
