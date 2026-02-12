@@ -121,7 +121,7 @@ fn pretend_fields_used_enum(cont: &Container, variants: &[Variant]) -> TokenStre
                 let variant_ident = &variant.ident;
                 let members = variant.fields.iter().map(|field| &field.member);
                 let placeholders = (0usize..).map(|i| format_ident!("__v{}", i));
-                patterns.push(quote!(#type_ident::#variant_ident { #(#members: #placeholders),* }))
+                patterns.push(quote!(#type_ident::#variant_ident { #(#members: #placeholders),* }));
             }
             Style::Unit => {}
         }
