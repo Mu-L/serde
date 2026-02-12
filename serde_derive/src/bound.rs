@@ -31,10 +31,11 @@ pub fn with_where_predicates(
     predicates: &[syn::WherePredicate],
 ) -> syn::Generics {
     let mut generics = generics.clone();
-    generics
-        .make_where_clause()
-        .predicates
-        .extend(predicates.iter().cloned());
+    let dst_predicates = &mut generics.make_where_clause().predicates;
+
+    for predicate in predicates {
+        dst_predicates.push(predicate.clone());
+    }
     generics
 }
 
@@ -43,14 +44,17 @@ pub fn with_where_predicates_from_fields(
     generics: &syn::Generics,
     from_field: fn(&attr::Field) -> Option<&[syn::WherePredicate]>,
 ) -> syn::Generics {
-    let predicates = cont
-        .data
-        .all_fields()
-        .filter_map(|field| from_field(&field.attrs))
-        .flat_map(<[syn::WherePredicate]>::to_vec);
-
     let mut generics = generics.clone();
-    generics.make_where_clause().predicates.extend(predicates);
+    let dst_predicates = &mut generics.make_where_clause().predicates;
+
+    for field in cont.data.all_fields() {
+        let Some(predicate_slice) = from_field(&field.attrs) else {
+            continue;
+        };
+        for inner_predicate in predicate_slice {
+            dst_predicates.push(inner_predicate.clone());
+        }
+    }
     generics
 }
 
@@ -65,14 +69,17 @@ pub fn with_where_predicates_from_variants(
             return generics.clone();
         }
     };
-
-    let predicates = variants
-        .iter()
-        .filter_map(|variant| from_variant(&variant.attrs))
-        .flat_map(<[syn::WherePredicate]>::to_vec);
-
     let mut generics = generics.clone();
-    generics.make_where_clause().predicates.extend(predicates);
+    let dst_predicates = &mut generics.make_where_clause().predicates;
+
+    for variant in variants {
+        let Some(predicate_slice) = from_variant(&variant.attrs) else {
+            continue;
+        };
+        for inner_predicate in predicate_slice {
+            dst_predicates.push(inner_predicate.clone());
+        }
+    }
     generics
 }
 
@@ -256,18 +263,18 @@ pub fn with_bound(
     match &cont.data {
         Data::Enum(variants) => {
             for variant in variants {
-                let relevant_fields = variant
-                    .fields
-                    .iter()
-                    .filter(|field| filter(&field.attrs, Some(&variant.attrs)));
-                for field in relevant_fields {
-                    visitor.visit_field(field.original);
+                for field in &variant.fields {
+                    if filter(&field.attrs, Some(&variant.attrs)) {
+                        visitor.visit_field(field.original);
+                    }
                 }
             }
         }
         Data::Struct(_, fields) => {
-            for field in fields.iter().filter(|field| filter(&field.attrs, None)) {
-                visitor.visit_field(field.original);
+            for field in fields {
+                if filter(&field.attrs, None) {
+                    visitor.visit_field(field.original);
+                }
             }
         }
     }

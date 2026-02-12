@@ -31,20 +31,19 @@ pub(super) fn deserialize(
 
     let (variants_stmt, variant_visitor) = enum_::prepare_enum_variant_enum(variants);
 
-    let variant_arms: &Vec<_> = &variants
-        .iter()
-        .enumerate()
-        .filter(|&(_, variant)| !variant.attrs.skip_deserializing())
-        .map(|(i, variant)| {
-            let variant_index = field_i(i);
+    let mut variant_arms = Vec::new();
+    for (i, variant) in variants.iter().enumerate() {
+        if variant.attrs.skip_deserializing() {
+            continue;
+        }
+        let variant_index = field_i(i);
 
-            let block = Match(enum_untagged::deserialize_variant(params, variant, cattrs));
+        let block = Match(enum_untagged::deserialize_variant(params, variant, cattrs));
 
-            quote! {
-                __Field::#variant_index => #block
-            }
-        })
-        .collect();
+        variant_arms.push(quote! {
+            __Field::#variant_index => #block
+        });
+    }
 
     let rust_name = params.type_name();
     let expecting = format!("adjacently tagged enum {}", rust_name);
@@ -64,35 +63,35 @@ pub(super) fn deserialize(
         _serde::#private::Err(<__A::Error as _serde::de::Error>::missing_field(#content))
     };
     let mut missing_content_fallthrough = quote!();
-    let missing_content_arms = variants
-        .iter()
-        .enumerate()
-        .filter(|&(_, variant)| !variant.attrs.skip_deserializing())
-        .filter_map(|(i, variant)| {
-            let variant_index = field_i(i);
-            let variant_ident = &variant.ident;
+    let mut missing_content_arms = Vec::new();
+    for (i, variant) in variants.iter().enumerate() {
+        if variant.attrs.skip_deserializing() {
+            continue;
+        }
+        let variant_index = field_i(i);
+        let variant_ident = &variant.ident;
 
-            let arm = match variant.style {
-                Style::Unit => quote! {
-                    _serde::#private::Ok(#this_value::#variant_ident)
-                },
-                Style::Newtype if variant.attrs.deserialize_with().is_none() => {
-                    let span = variant.original.span();
-                    let func = quote_spanned!(span=> _serde::#private::de::missing_field);
-                    quote! {
-                        #func(#content).map(#this_value::#variant_ident)
-                    }
+        let arm = match variant.style {
+            Style::Unit => quote! {
+                _serde::#private::Ok(#this_value::#variant_ident)
+            },
+            Style::Newtype if variant.attrs.deserialize_with().is_none() => {
+                let span = variant.original.span();
+                let func = quote_spanned!(span=> _serde::#private::de::missing_field);
+                quote! {
+                    #func(#content).map(#this_value::#variant_ident)
                 }
-                _ => {
-                    missing_content_fallthrough = quote!(_ => #missing_content);
-                    return None;
-                }
-            };
-            Some(quote! {
-                __Field::#variant_index => #arm,
-            })
-        })
-        .collect::<Vec<_>>();
+            }
+            _ => {
+                missing_content_fallthrough = quote!(_ => #missing_content);
+                continue;
+            }
+        };
+        missing_content_arms.push(quote! {
+            __Field::#variant_index => #arm,
+        });
+    }
+
     if !missing_content_arms.is_empty() {
         missing_content = quote! {
             match __field {
