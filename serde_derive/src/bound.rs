@@ -274,39 +274,47 @@ pub fn with_bound(
 
     let relevant_type_params = visitor.relevant_type_params;
     let associated_type_usage = visitor.associated_type_usage;
-    let new_predicates = generics
-        .type_params()
-        .map(|param| param.ident.clone())
-        .filter(|id| relevant_type_params.contains(id))
-        .map(|id| syn::TypePath {
-            qself: None,
-            path: id.into(),
-        })
-        .chain(associated_type_usage.into_iter().cloned())
-        .map(|bounded_ty| {
-            syn::WherePredicate::Type(syn::PredicateType {
-                lifetimes: None,
-                // the type parameter that is being bounded e.g. T
-                bounded_ty: syn::Type::Path(bounded_ty),
-                colon_token: <Token![:]>::default(),
-                // the bound e.g. Serialize
-                bounds: vec![syn::TypeParamBound::Trait(syn::TraitBound {
+
+    fn make_where_bounded_type(
+        bounded_ty: syn::TypePath,
+        bound: &syn::Path,
+    ) -> syn::WherePredicate {
+        syn::WherePredicate::Type(syn::PredicateType {
+            lifetimes: None,
+            // the type parameter that is being bounded e.g. T
+            bounded_ty: syn::Type::Path(bounded_ty),
+            colon_token: <Token![:]>::default(),
+            // the bound e.g. Serialize
+            bounds: {
+                let mut punct = Punctuated::new();
+                punct.push(syn::TypeParamBound::Trait(syn::TraitBound {
                     paren_token: None,
                     modifier: syn::TraitBoundModifier::None,
                     lifetimes: None,
                     path: bound.clone(),
-                })]
-                .into_iter()
-                .collect(),
-            })
-        });
+                }));
+                punct
+            },
+        })
+    }
 
-    let mut generics = generics.clone();
-    generics
-        .make_where_clause()
-        .predicates
-        .extend(new_predicates);
-    generics
+    let mut dst_generics = generics.clone();
+    let dst_predicates = &mut dst_generics.make_where_clause().predicates;
+    for param in generics.type_params() {
+        let id = &param.ident;
+        if !relevant_type_params.contains(id) {
+            continue;
+        }
+        let bounded_ty = syn::TypePath {
+            qself: None,
+            path: id.clone().into(),
+        };
+        dst_predicates.push(make_where_bounded_type(bounded_ty, bound));
+    }
+    for bounded_ty in associated_type_usage {
+        dst_predicates.push(make_where_bounded_type(bounded_ty.clone(), bound));
+    }
+    dst_generics
 }
 
 pub fn with_self_bound(
