@@ -458,7 +458,7 @@ fn serialize_variant(
                 }
             }
             Style::Tuple => {
-                let field_names = (0..variant.fields.len()).map(|i| field_i(i));
+                let field_names = (0..variant.fields.len()).map(field_i);
                 quote! {
                     #this_value::#variant_ident(#(ref #field_names),*)
                 }
