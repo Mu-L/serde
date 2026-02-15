@@ -655,7 +655,7 @@ struct FieldWithAliases<'a> {
     aliases: &'a BTreeSet<Name>,
 }
 
-fn field_i(i: usize) -> Ident {
+pub(crate) fn field_i(i: usize) -> Ident {
     Ident::new(&format!("__field{}", i), Span::call_site())
 }
 
